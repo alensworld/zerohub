@@ -1,6 +1,6 @@
 --[[
     LO Hub — Universal Roblox Script
-    Loader: loadstring(game:HttpGet('https://raw.githubusercontent.com/KULLANICI/lo-hub/main/source'))()
+    Loader: loadstring(game:HttpGet('https://raw.githubusercontent.com/alensworld/zerohub/main/source'))()
     Xeno / Fluxus / Hydrogen / Wave uyumlu
 ]]
 
