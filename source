@@ -1,6 +1,7 @@
 --[[
     LO Hub — Universal Roblox Script
-    Loader: loadstring(game:HttpGet('https://raw.githubusercontent.com/alensworld/zerohub/main/source'))()
+    Loader: loadstring(game:HttpGet('https://raw.githubusercontent.com/KULLANICI/lo-hub/main/source'))()
+    Xeno / Fluxus / Hydrogen / Wave uyumlu
 ]]
 
 -- ==================== CONFIG ====================
@@ -14,7 +15,6 @@ local Config = {
         Tracers = false,
         MaxDistance = 1000,
         TeamCheck = false,
-        BoxColor = Color3.fromRGB(0, 255, 0),
         EnemyColor = Color3.fromRGB(255, 0, 0),
         AllyColor = Color3.fromRGB(0, 255, 0),
     },
@@ -54,17 +54,20 @@ end
 
 local function getRoot(player)
     local char = getChar(player)
-    return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
 end
 
 local function getHead(player)
     local char = getChar(player)
-    return char and char:FindFirstChild("Head")
+    if not char then return nil end
+    return char:FindFirstChild("Head")
 end
 
 local function getHumanoid(player)
     local char = getChar(player)
-    return char and char:FindFirstChildOfClass("Humanoid")
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
 end
 
 local function isAlive(player)
@@ -82,6 +85,21 @@ local function worldToScreen(pos)
     return Vector2.new(vec.X, vec.Y), onScreen, vec.Z
 end
 
+local function clamp(val, min, max)
+    if val < min then return min end
+    if val > max then return max end
+    return val
+end
+
+-- ==================== DRAWING SAFETY ====================
+local function safeDrawing(type)
+    local ok, obj = pcall(function()
+        return Drawing.new(type)
+    end)
+    if ok then return obj end
+    return nil
+end
+
 -- ==================== ESP ====================
 local ESPObjects = {}
 
@@ -91,54 +109,61 @@ local function createESP(player)
 
     local esp = {player = player, drawings = {}}
 
-    -- Box
-    local box = Drawing.new("Square")
-    box.Thickness = 1
-    box.Filled = false
-    box.Transparency = 1
-    box.Visible = false
-    esp.drawings.box = box
+    local box = safeDrawing("Square")
+    if box then
+        box.Thickness = 1
+        box.Filled = false
+        box.Transparency = 1
+        box.Visible = false
+        esp.drawings.box = box
+    end
 
-    -- Name
-    local name = Drawing.new("Text")
-    name.Size = 13
-    name.Center = true
-    name.Outline = true
-    name.Transparency = 1
-    name.Visible = false
-    esp.drawings.name = name
+    local name = safeDrawing("Text")
+    if name then
+        name.Size = 13
+        name.Center = true
+        name.Outline = true
+        name.Transparency = 1
+        name.Visible = false
+        esp.drawings.name = name
+    end
 
-    -- Health bar
-    local healthBg = Drawing.new("Square")
-    healthBg.Thickness = 1
-    healthBg.Filled = true
-    healthBg.Transparency = 0.5
-    healthBg.Color = Color3.fromRGB(0, 0, 0)
-    healthBg.Visible = false
-    esp.drawings.healthBg = healthBg
+    local healthBg = safeDrawing("Square")
+    if healthBg then
+        healthBg.Thickness = 1
+        healthBg.Filled = true
+        healthBg.Transparency = 0.5
+        healthBg.Color = Color3.fromRGB(0, 0, 0)
+        healthBg.Visible = false
+        esp.drawings.healthBg = healthBg
+    end
 
-    local healthBar = Drawing.new("Square")
-    healthBar.Thickness = 1
-    healthBar.Filled = true
-    healthBar.Transparency = 1
-    healthBar.Visible = false
-    esp.drawings.healthBar = healthBar
+    local healthBar = safeDrawing("Square")
+    if healthBar then
+        healthBar.Thickness = 1
+        healthBar.Filled = true
+        healthBar.Transparency = 1
+        healthBar.Visible = false
+        esp.drawings.healthBar = healthBar
+    end
 
-    -- Distance
-    local dist = Drawing.new("Text")
-    dist.Size = 12
-    dist.Center = true
-    dist.Outline = true
-    dist.Transparency = 1
-    dist.Visible = false
-    esp.drawings.dist = dist
+    local dist = safeDrawing("Text")
+    if dist then
+        dist.Size = 12
+        dist.Center = true
+        dist.Outline = true
+        dist.Transparency = 1
+        dist.Visible = false
+        esp.drawings.dist = dist
+    end
 
-    -- Tracer
-    local tracer = Drawing.new("Line")
-    tracer.Thickness = 1
-    tracer.Transparency = 1
-    tracer.Visible = false
-    esp.drawings.tracer = tracer
+    local tracer = safeDrawing("Line")
+    if tracer then
+        tracer.Thickness = 1
+        tracer.Transparency = 1
+        tracer.Visible = false
+        esp.drawings.tracer = tracer
+    end
 
     ESPObjects[player] = esp
 end
@@ -147,121 +172,129 @@ local function removeESP(player)
     local esp = ESPObjects[player]
     if not esp then return end
     for _, drawing in pairs(esp.drawings) do
-        drawing:Remove()
+        pcall(function() drawing:Remove() end)
     end
     ESPObjects[player] = nil
 end
 
+local function hideAll(esp)
+    for _, d in pairs(esp.drawings) do
+        d.Visible = false
+    end
+end
+
 local function updateESP()
     for player, esp in pairs(ESPObjects) do
-        local visible = Config.ESP.Enabled and isAlive(player)
-        local color = isTeammate(player) and Config.ESP.AllyColor or Config.ESP.EnemyColor
+        local ok, err = pcall(function()
+            local visible = Config.ESP.Enabled and isAlive(player)
+            local color = isTeammate(player) and Config.ESP.AllyColor or Config.ESP.EnemyColor
 
-        if not visible or not getChar(player) then
-            for _, d in pairs(esp.drawings) do d.Visible = false end
-            continue
-        end
+            if not visible or not getChar(player) then
+                hideAll(esp)
+                return
+            end
 
-        local root = getRoot(player)
-        local head = getHead(player)
-        if not root or not head then
-            for _, d in pairs(esp.drawings) do d.Visible = false end
-            continue
-        end
+            local root = getRoot(player)
+            local head = getHead(player)
+            if not root or not head then
+                hideAll(esp)
+                return
+            end
 
-        local rootPos = root.Position
-        local myRoot = getRoot(LP)
-        if not myRoot then continue end
+            local rootPos = root.Position
+            local myRoot = getRoot(LP)
+            if not myRoot then
+                hideAll(esp)
+                return
+            end
 
-        local distance = (rootPos - myRoot.Position).Magnitude
-        if distance > Config.ESP.MaxDistance then
-            for _, d in pairs(esp.drawings) do d.Visible = false end
-            continue
-        end
+            local distance = (rootPos - myRoot.Position).Magnitude
+            if distance > Config.ESP.MaxDistance then
+                hideAll(esp)
+                return
+            end
 
-        -- 3D bounding box -> 2D
-        local topPos, topOnScreen = worldToScreen((head.CFrame * CFrame.new(0, 1.5, 0)).Position)
-        local bottomPos, bottomOnScreen = worldToScreen((root.CFrame * CFrame.new(0, -3, 0)).Position)
+            local topPos, topOnScreen = worldToScreen((head.CFrame * CFrame.new(0, 1.5, 0)).Position)
+            local bottomPos, bottomOnScreen = worldToScreen((root.CFrame * CFrame.new(0, -3, 0)).Position)
 
-        if not topOnScreen and not bottomOnScreen then
-            for _, d in pairs(esp.drawings) do d.Visible = false end
-            continue
-        end
+            if not topOnScreen and not bottomOnScreen then
+                hideAll(esp)
+                return
+            end
 
-        local boxHeight = math.abs(bottomPos.Y - topPos.Y)
-        local boxWidth = boxHeight * 0.55
+            local boxHeight = math.abs(bottomPos.Y - topPos.Y)
+            local boxWidth = boxHeight * 0.55
 
-        -- Box
-        if Config.ESP.Boxes then
-            esp.drawings.box.Size = Vector2.new(boxWidth, boxHeight)
-            esp.drawings.box.Position = Vector2.new(topPos.X - boxWidth / 2, topPos.Y)
-            esp.drawings.box.Color = color
-            esp.drawings.box.Visible = true
-        else
-            esp.drawings.box.Visible = false
-        end
+            if Config.ESP.Boxes and esp.drawings.box then
+                esp.drawings.box.Size = Vector2.new(boxWidth, boxHeight)
+                esp.drawings.box.Position = Vector2.new(topPos.X - boxWidth / 2, topPos.Y)
+                esp.drawings.box.Color = color
+                esp.drawings.box.Visible = true
+            elseif esp.drawings.box then
+                esp.drawings.box.Visible = false
+            end
 
-        -- Name
-        if Config.ESP.Names then
-            esp.drawings.name.Text = player.DisplayName
-            esp.drawings.name.Position = Vector2.new(topPos.X, topPos.Y - 16)
-            esp.drawings.name.Color = Color3.fromRGB(255, 255, 255)
-            esp.drawings.name.Visible = true
-        else
-            esp.drawings.name.Visible = false
-        end
+            if Config.ESP.Names and esp.drawings.name then
+                esp.drawings.name.Text = player.DisplayName
+                esp.drawings.name.Position = Vector2.new(topPos.X, topPos.Y - 16)
+                esp.drawings.name.Color = Color3.fromRGB(255, 255, 255)
+                esp.drawings.name.Visible = true
+            elseif esp.drawings.name then
+                esp.drawings.name.Visible = false
+            end
 
-        -- Health bar
-        if Config.ESP.Health then
-            local hum = getHumanoid(player)
-            local ratio = hum and math.clamp(hum.Health / hum.MaxHealth, 0, 1) or 0
-            local barX = topPos.X - boxWidth / 2 - 6
+            if Config.ESP.Health and esp.drawings.healthBg and esp.drawings.healthBar then
+                local hum = getHumanoid(player)
+                local ratio = 0
+                if hum then ratio = clamp(hum.Health / hum.MaxHealth, 0, 1) end
+                local barX = topPos.X - boxWidth / 2 - 6
 
-            esp.drawings.healthBg.Size = Vector2.new(3, boxHeight)
-            esp.drawings.healthBg.Position = Vector2.new(barX, topPos.Y)
-            esp.drawings.healthBg.Visible = true
+                esp.drawings.healthBg.Size = Vector2.new(3, boxHeight)
+                esp.drawings.healthBg.Position = Vector2.new(barX, topPos.Y)
+                esp.drawings.healthBg.Visible = true
 
-            local barH = boxHeight * ratio
-            esp.drawings.healthBar.Size = Vector2.new(3, barH)
-            esp.drawings.healthBar.Position = Vector2.new(barX, topPos.Y + (boxHeight - barH))
-            esp.drawings.healthBar.Color = Color3.fromRGB(255 * (1 - ratio), 255 * ratio, 0)
-            esp.drawings.healthBar.Visible = true
-        else
-            esp.drawings.healthBg.Visible = false
-            esp.drawings.healthBar.Visible = false
-        end
+                local barH = boxHeight * ratio
+                esp.drawings.healthBar.Size = Vector2.new(3, barH)
+                esp.drawings.healthBar.Position = Vector2.new(barX, topPos.Y + (boxHeight - barH))
+                esp.drawings.healthBar.Color = Color3.fromRGB(255 * (1 - ratio), 255 * ratio, 0)
+                esp.drawings.healthBar.Visible = true
+            elseif esp.drawings.healthBg then
+                esp.drawings.healthBg.Visible = false
+                if esp.drawings.healthBar then esp.drawings.healthBar.Visible = false end
+            end
 
-        -- Distance
-        if Config.ESP.Distance then
-            esp.drawings.dist.Text = string.format("[%dm]", math.floor(distance))
-            esp.drawings.dist.Position = Vector2.new(bottomPos.X, bottomPos.Y + 2)
-            esp.drawings.dist.Color = Color3.fromRGB(200, 200, 200)
-            esp.drawings.dist.Visible = true
-        else
-            esp.drawings.dist.Visible = false
-        end
+            if Config.ESP.Distance and esp.drawings.dist then
+                esp.drawings.dist.Text = string.format("[%dm]", math.floor(distance))
+                esp.drawings.dist.Position = Vector2.new(bottomPos.X, bottomPos.Y + 2)
+                esp.drawings.dist.Color = Color3.fromRGB(200, 200, 200)
+                esp.drawings.dist.Visible = true
+            elseif esp.drawings.dist then
+                esp.drawings.dist.Visible = false
+            end
 
-        -- Tracer
-        if Config.ESP.Tracers then
-            local viewportSize = Camera.ViewportSize
-            esp.drawings.tracer.From = Vector2.new(viewportSize.X / 2, viewportSize.Y)
-            esp.drawings.tracer.To = bottomPos
-            esp.drawings.tracer.Color = color
-            esp.drawings.tracer.Visible = true
-        else
-            esp.drawings.tracer.Visible = false
-        end
+            if Config.ESP.Tracers and esp.drawings.tracer then
+                local viewportSize = Camera.ViewportSize
+                esp.drawings.tracer.From = Vector2.new(viewportSize.X / 2, viewportSize.Y)
+                esp.drawings.tracer.To = bottomPos
+                esp.drawings.tracer.Color = color
+                esp.drawings.tracer.Visible = true
+            elseif esp.drawings.tracer then
+                esp.drawings.tracer.Visible = false
+            end
+        end)
     end
 end
 
 -- ==================== AIMBOT ====================
-local AimFOVCircle = Drawing.new("Circle")
-AimFOVCircle.Thickness = 1
-AimFOVCircle.Filled = false
-AimFOVCircle.Transparency = 0.5
-AimFOVCircle.Color = Color3.fromRGB(255, 255, 255)
-AimFOVCircle.NumSides = 64
-AimFOVCircle.Visible = false
+local AimFOVCircle = safeDrawing("Circle")
+if AimFOVCircle then
+    AimFOVCircle.Thickness = 1
+    AimFOVCircle.Filled = false
+    AimFOVCircle.Transparency = 0.5
+    AimFOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    AimFOVCircle.NumSides = 64
+    AimFOVCircle.Visible = false
+end
 
 local aiming = false
 
@@ -271,28 +304,31 @@ local function getClosestTarget()
     local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
     for _, player in ipairs(Players:GetPlayers()) do
-        if player == LP then continue end
-        if not isAlive(player) then continue end
-        if Config.Aimbot.TeamCheck and isTeammate(player) then continue end
+        if player ~= LP and isAlive(player) then
+            if not (Config.Aimbot.TeamCheck and isTeammate(player)) then
+                local char = getChar(player)
+                if char then
+                    local targetPart = char:FindFirstChild(Config.Aimbot.TargetPart)
+                    if targetPart then
+                        local myRoot = getRoot(LP)
+                        local inRange = true
+                        if myRoot then
+                            inRange = (targetPart.Position - myRoot.Position).Magnitude <= Config.Aimbot.MaxDistance
+                        end
 
-        local char = getChar(player)
-        if not char then continue end
-
-        local targetPart = char:FindFirstChild(Config.Aimbot.TargetPart)
-        if not targetPart then continue end
-
-        local myRoot = getRoot(LP)
-        if myRoot and (targetPart.Position - myRoot.Position).Magnitude > Config.Aimbot.MaxDistance then
-            continue
-        end
-
-        local screenPos, onScreen = worldToScreen(targetPart.Position)
-        if not onScreen then continue end
-
-        local dist = (screenPos - screenCenter).Magnitude
-        if dist < closestDist then
-            closestDist = dist
-            closest = targetPart
+                        if inRange then
+                            local screenPos, onScreen = worldToScreen(targetPart.Position)
+                            if onScreen then
+                                local dist = (screenPos - screenCenter).Magnitude
+                                if dist < closestDist then
+                                    closestDist = dist
+                                    closest = targetPart
+                                end
+                            end
+                        end
+                    end
+                end
+            end
         end
     end
 
@@ -300,13 +336,14 @@ local function getClosestTarget()
 end
 
 local function updateAimbot()
-    -- FOV circle
-    if Config.Aimbot.Enabled and Config.Aimbot.ShowFOV then
-        AimFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-        AimFOVCircle.Radius = Config.Aimbot.FOV
-        AimFOVCircle.Visible = true
-    else
-        AimFOVCircle.Visible = false
+    if AimFOVCircle then
+        if Config.Aimbot.Enabled and Config.Aimbot.ShowFOV then
+            AimFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            AimFOVCircle.Radius = Config.Aimbot.FOV
+            AimFOVCircle.Visible = true
+        else
+            AimFOVCircle.Visible = false
+        end
     end
 
     if not Config.Aimbot.Enabled or not aiming then return end
@@ -317,7 +354,6 @@ local function updateAimbot()
     local targetPos = target.Position
     local smoothness = Config.Aimbot.Smoothness
 
-    -- Camera CFrame'i hedefe dogru kaydır
     local currentCF = Camera.CFrame
     local targetCF = CFrame.lookAt(currentCF.Position, targetPos)
     Camera.CFrame = currentCF:Lerp(targetCF, 1 / smoothness)
@@ -332,44 +368,42 @@ local function updatePlayerMods()
     local root = getRoot(LP)
     if not hum or not root then return end
 
-    -- Speed
     if Config.Player.Speed ~= 16 then
         hum.WalkSpeed = Config.Player.Speed
     end
 
-    -- Jump power
     if Config.Player.JumpPower ~= 50 then
         hum.JumpPower = Config.Player.JumpPower
         hum.UseJumpPower = true
     end
 
-    -- God mode
     if Config.Player.GodMode then
         hum.MaxHealth = math.huge
         hum.Health = math.huge
     end
 
-    -- Noclip
     if Config.Player.Noclip then
-        for _, part in ipairs(getChar(LP):GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
+        local char = getChar(LP)
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
             end
         end
     end
 
-    -- Fly
     if Config.Player.Fly then
         if not flyActive then
             flyBV = Instance.new("BodyVelocity")
             flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            flyBV.Velocity = Vector3.zero
+            flyBV.Velocity = Vector3.new(0, 0, 0)
             flyBV.Parent = root
             hum.PlatformStand = true
             flyActive = true
         end
 
-        local dir = Vector3.zero
+        local dir = Vector3.new(0, 0, 0)
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then
             dir = dir + Camera.CFrame.LookVector
         end
@@ -412,12 +446,10 @@ end)
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
 
-    -- Aimbot key
     if input.UserInputType == Config.Aimbot.Key then
         aiming = true
     end
 
-    -- Hotkeys
     if input.KeyCode == Enum.KeyCode.F1 then
         Config.ESP.Enabled = not Config.ESP.Enabled
         print("[LO Hub] ESP: " .. (Config.ESP.Enabled and "ON" or "OFF"))
@@ -460,16 +492,15 @@ Players.PlayerRemoving:Connect(function(player)
     removeESP(player)
 end)
 
--- Init ESP for existing players
 for _, player in ipairs(Players:GetPlayers()) do
     createESP(player)
 end
 
 -- ==================== MAIN LOOP ====================
 RunService.RenderStepped:Connect(function()
-    updateESP()
-    updateAimbot()
-    updatePlayerMods()
+    pcall(updateESP)
+    pcall(updateAimbot)
+    pcall(updatePlayerMods)
 end)
 
 -- ==================== LOADED ====================
